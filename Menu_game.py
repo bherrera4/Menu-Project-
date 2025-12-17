@@ -1,9 +1,18 @@
+print("PROGRAM STARTED")
+
 import time
 import os
 import sys
 print(sys.executable)
 from colorama import Fore, Style, init
 init(autoreset=True) 
+
+from enum import Enum, auto
+
+class MenuState(Enum):
+    MAIN = auto()
+    SETTINGS = auto()
+    QUIT = auto()
 
 
 # ============= Colors =============
@@ -56,12 +65,13 @@ def start_game():
 
 # ---------------- Options Menu ---------------- #
 def options_menu():
-    while True:
+        print("\n" * 50)
+
         print("\n=== Options Menu ===")
-        print(f"{BLUE}1. Volume:{RESET} {settings['volume']}")
-        print(f"{BLUE}2. Graphics:{RESET} {settings['graphics']}")
-        print(f"{BLUE}3. Controls: {RESET}{settings['controls']}")
-        print(F"{BLUE}4. Back to Main Menu{RESET}")
+        print(f"{BLUE}1. Volume: {settings['volume']}")
+        print(f"{BLUE}2. Graphics: {settings['graphics']}")
+        print(f"{BLUE}3. Controls: {settings['controls']}")
+        print(f"{BLUE}4. Back to Main Menu")
 
         choice = input("Select an option: ")
 
@@ -69,13 +79,14 @@ def options_menu():
         if choice == "1":
             try:
                 new_volume = int(input("Enter new volume (0-100): "))
-                if 0 <= new_volume <= 100:
+                if 0 <= new_volume <= 100: 
                     settings["volume"] = new_volume
                     success(f"Volume updated to {new_volume}!")
                 else:
                     error("Volume must be between 0 and 100.")
             except:
                 error("Invalid Input. Please enter a number.")
+                return MenuState.SETTINGS
 
         # -------- Graphics Settings -------- #
         elif choice == "2":
@@ -91,30 +102,28 @@ def options_menu():
                 success("Graphics updated!")
             else:
                 error("Invalid graphics setting.")
+                return MenuState.SETTINGS
 
         # -------- Controls Settings -------- #
         elif choice == "3":
-            if settings["controls"] == "Keyboard":
-                settings["controls"] = "Gamepad" if settings ["controls"] == "Keyboard" else "Keyboard"
-            else:
-                settings["controls"] = "Keyboard"
+            settings["controls"] = "Gamepad" if settings["controls"] == "Keyboard" else "Keyboard"
 
             print(f"Controls switched to {settings['controls']}!")
+            return MenuState.SETTINGS
 
         # -------- Back to Menu -------- #
         elif choice == "4":
             print(YELLOW + "Returning to Main Menu..." + RESET)
-            break
+            return MenuState.MAIN
 
         else:
             error("Invalid choice. Please select a valid option.")
+            return MenuState.SETTINGS
 
 
 # ---------------- Main Menu ---------------- #
 def main_menu():
-    running = True
-
-    while running:
+    
         print(Fore.CYAN + "\n=== Main Menu ===")
         print(Fore.YELLOW + "1. Start Game")
         print(Fore.YELLOW + "2. Load Game")
@@ -125,20 +134,40 @@ def main_menu():
         choice = input(Fore.GREEN + "Choose an option: ")
 
         if choice == "1":
-            print(Fore.MAGENTA + "Starting Game...")
+            start_game()
+            return MenuState.MAIN
+        
         elif choice == "2":
-            print(Fore.MAGENTA + "Loading game (not implemented yet)...")
+            print("Loading game... (Feature not implemented)")
+            return MenuState.MAIN
+        
         elif choice == "3":
-            print(Fore.MAGENTA + "Opening Settings...")
+            return MenuState.SETTINGS
+        
         elif choice == "4":
-            print(Fore.MAGENTA + "This game was developed by Brandon Herrera. Thanks for playing!")
+            print("This game was developed by Brandon Herrera. Thanks so much for playing!")
+            return MenuState.MAIN
+
         elif choice == "5":
-            print(Fore.RED + "Quitting game. Goodbye!")
-            break
+            return MenuState.QUIT
+        
         else:
-            print(Fore.RED + "Invalid choice. Please select a valid option.")
+            error("Invalid choice. Please select a valid option.")
+            return MenuState.MAIN
 
 
 # Start program
-main_menu()
+
+current_state = MenuState.MAIN
+
+while current_state != MenuState.QUIT:
+
+    if current_state == MenuState.MAIN:
+        current_state = main_menu()
+
+    elif current_state == MenuState.MAIN:
+        current_state = options_menu()
+
+        print("Exiting game. Goodbye!")
+
 
