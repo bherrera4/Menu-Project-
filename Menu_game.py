@@ -3,7 +3,24 @@ print("PROGRAM STARTED")
 import time
 import os
 import sys
-print(sys.executable)
+import json
+
+SETTINGS_FILE = "settings.json"
+
+def load_settings():
+    global settings
+    try:
+        with open(SETTINGS_FILE, "r") as f:
+            settings = json.load(f)
+            success("Settings loaded successfully.")
+    except FileNotFoundError:
+        success("No settings file found. Using default settings.")
+    except json.JSONDecodeError:
+        error("Settings file is corrupted. Using default settings.")
+def save_settings():
+    with open(SETTINGS_FILE, "w") as f:
+        json.dump(settings, f, indent=4)
+
 from colorama import Fore, Style, init
 init(autoreset=True) 
 
@@ -12,6 +29,9 @@ from enum import Enum, auto
 class MenuState(Enum):
     MAIN = auto()
     SETTINGS = auto()
+    CONFIRM_QUIT = auto()
+    GAME = auto()
+    PAUSE = auto()
     QUIT = auto()
 
 
@@ -58,14 +78,14 @@ def start_game():
     for i in range(5):
         print(YELLOW + "Loading" + "." * (i % 4) + RESET)
         time.sleep(0.4)
-        os.system('cls' if os.name == 'nt' else 'clear')
+        # os.system('cls' if os.name == 'nt' else 'clear')
 
     success("Game Loaded! (Pretend game is running...)")
 
 
 # ---------------- Options Menu ---------------- #
 def options_menu():
-        print("\n" * 50)
+        print("\n" + "=" * 40)
 
         print("\n=== Options Menu ===")
         print(f"{BLUE}1. Volume: {settings['volume']}")
@@ -82,6 +102,7 @@ def options_menu():
                 if 0 <= new_volume <= 100: 
                     settings["volume"] = new_volume
                     success(f"Volume updated to {new_volume}!")
+                    return MenuState.SETTINGS
                 else:
                     error("Volume must be between 0 and 100.")
             except:
@@ -114,17 +135,64 @@ def options_menu():
         # -------- Back to Menu -------- #
         elif choice == "4":
             print(YELLOW + "Returning to Main Menu..." + RESET)
+            save_settings()
             return MenuState.MAIN
 
         else:
             error("Invalid choice. Please select a valid option.")
             return MenuState.SETTINGS
 
+  # ---------------- Game Loop ---------------- #
 
+def game_loop():
+    print("\n=== GAME IS NOW RUNNING ===")
+    print(GREEN + "At this point, prentend that the game is running." + RESET)
+    print(MAGENTA + "[P] Pause Game" + RESET)
+    print(CYAN + "[Q] Quit Game" + RESET)
+
+    choice = input(BLUE + "> " + RESET)
+
+    if choice == "p":
+        print("Returning to Main Menu...")
+        return MenuState.PAUSE
+    
+    elif choice == "q":
+        return MenuState.CONFIRM_QUIT
+    
+    elif choice == "1":
+        return MenuState.GAME
+    
+    else:
+        error(RED + "Invalid choice. Please select a valid option." + RESET)
+        return MenuState.GAME
+
+# ---------------- Confirm Quit Menu ---------------- #
+
+def confirm_quit_menu():
+    print("\n=== Confirm Quit ===")
+    print(BLUE +"Are you sure you want to quit?" + RESET)
+    print(BLUE +"1. Yes, I'm sure I want to quit." + RESET)
+    print(CYAN +"2. No, I want to stay in the game." + RESET)
+
+    choice = input(YELLOW + "Choose an option: " + RESET)
+
+    if choice == "1":
+        save_settings()
+        print(GREEN + "Settings have been saved. Goodbye!" )
+        return MenuState.QUIT
+    
+    elif choice == "2":
+        print("Returning to Main Menu...")
+        return MenuState.MAIN
+    
+    else:
+        error("Invalid choice. Please select a valid option.")
+        return MenuState.CONFIRM_QUIT
 # ---------------- Main Menu ---------------- #
 def main_menu():
-    
-        print(Fore.CYAN + "\n=== Main Menu ===")
+
+        print("\n" + "=" * 40)    
+        print(Fore.CYAN + "=== Main Menu ===")
         print(Fore.YELLOW + "1. Start Game")
         print(Fore.YELLOW + "2. Load Game")
         print(Fore.YELLOW + "3. Settings")
@@ -135,7 +203,7 @@ def main_menu():
 
         if choice == "1":
             start_game()
-            return MenuState.MAIN
+            return MenuState.GAME
         
         elif choice == "2":
             print("Loading game... (Feature not implemented)")
@@ -149,25 +217,59 @@ def main_menu():
             return MenuState.MAIN
 
         elif choice == "5":
-            return MenuState.QUIT
+            return MenuState.CONFIRM_QUIT
         
         else:
             error("Invalid choice. Please select a valid option.")
             return MenuState.MAIN
+        
+# ============= Pause Menu ============= #
+def pause_menu():
+    print("\n=== GAME IS PAUSED ===")
+    print(GREEN + "1. Resume Game" + RESET)
+    print(MAGENTA + "2. Return to Main Menu" + RESET)
+    print(CYAN + "3. Quit Game" + RESET)
 
+    choice = input(BLUE + "Choose an option: " + RESET)
+
+    if choice == "1":
+        print(GREEN + "Resuming game..." + RESET)
+        return MenuState.GAME
+    
+    elif choice == "2":
+        print(MAGENTA + "Returning to Main Menu..." + RESET)
+        return MenuState.MAIN
+    
+    elif choice == "3":
+        return MenuState.CONFIRM_QUIT
+    
+    else:
+        error(RED + "Invalid choice. Please select a valid option." + RESET)
+        return MenuState.PAUSE
 
 # Start program
 
+STATE_HANDLERS = {
+    MenuState.MAIN: main_menu,
+    MenuState.SETTINGS: options_menu,
+    MenuState.CONFIRM_QUIT: confirm_quit_menu,
+    MenuState.GAME: game_loop,
+    MenuState.PAUSE: pause_menu,
+}
+load_settings()
+
 current_state = MenuState.MAIN
 
+print("Entering main loop with state:", current_state)
+
 while current_state != MenuState.QUIT:
+    try:
+        current_state = STATE_HANDLERS[current_state]()
+    except KeyError:
+        raise RuntimeError(f"No handler for state: {current_state}")
 
-    if current_state == MenuState.MAIN:
-        current_state = main_menu()
+print("Exiting game. Goodbye!")
 
-    elif current_state == MenuState.MAIN:
-        current_state = options_menu()
 
-        print("Exiting game. Goodbye!")
 
 
