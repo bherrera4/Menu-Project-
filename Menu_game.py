@@ -70,6 +70,8 @@ settings = {
     "controls": "Keyboard"
 }
 
+settings_return_state = MenuState.MAIN
+
 # ---------------- Start Game ---------------- #
 def start_game():
     print("You selected to start the game. Starting game...")
@@ -121,6 +123,7 @@ def options_menu():
             if new_graphics in options:
                 settings["graphics"] = new_graphics
                 success("Graphics updated!")
+                return MenuState.SETTINGS
             else:
                 error("Invalid graphics setting.")
                 return MenuState.SETTINGS
@@ -130,27 +133,52 @@ def options_menu():
             settings["controls"] = "Gamepad" if settings["controls"] == "Keyboard" else "Keyboard"
 
             print(f"Controls switched to {settings['controls']}!")
+            global settings_return_state
+            settings_return_state = MenuState.MAIN
             return MenuState.SETTINGS
 
         # -------- Back to Menu -------- #
         elif choice == "4":
             print(YELLOW + "Returning to Main Menu..." + RESET)
             save_settings()
-            return MenuState.MAIN
+            return settings_return_state
 
         else:
             error("Invalid choice. Please select a valid option.")
             return MenuState.SETTINGS
 
+# ---------------- Apply settings function ---------------- #
+def apply_settings():
+    if settings["volume"] >= 75:
+        volume_desc = "LOUD"
+    elif settings["volume"] >= 40:
+        volume_desc = "NORMAL"
+    else:
+        volume_desc = "QUIET"
+
+    graphics_level = settings["graphics"]
+
+    return volume_desc, graphics_level
+
+
   # ---------------- Game Loop ---------------- #
 
 def game_loop():
+    volume_desc, graphics_level = apply_settings()
+
     print("\n=== GAME IS NOW RUNNING ===")
-    print(GREEN + "At this point, prentend that the game is running." + RESET)
-    print(MAGENTA + "[P] Pause Game" + RESET)
+
+    if graphics_level in ("High", "Ultra"):
+        print(CYAN + " Fancy Hud Enabled" + RESET)
+
+    print(GREEN + f"Volume Level: {volume_desc}" +RESET)
+    print(WHITE + "At this point, prentend that the game is running." + RESET)
+
+
+    print( YELLOW + "[P] Pause Game" + RESET)
     print(CYAN + "[Q] Quit Game" + RESET)
 
-    choice = input(BLUE + "> " + RESET)
+    choice = input(BLUE + "> " + RESET).lower()
 
     if choice == "p":
         print("Returning to Main Menu...")
@@ -238,7 +266,9 @@ def pause_menu():
     
     elif choice == "2":
         print(MAGENTA + "Returning to Main Menu..." + RESET)
-        return MenuState.MAIN
+        global settings_return_state
+        settings_return_state = MenuState.PAUSE
+        return MenuState.SETTINGS
     
     elif choice == "3":
         return MenuState.CONFIRM_QUIT
@@ -255,6 +285,7 @@ STATE_HANDLERS = {
     MenuState.CONFIRM_QUIT: confirm_quit_menu,
     MenuState.GAME: game_loop,
     MenuState.PAUSE: pause_menu,
+    MenuState.CONFIRM_QUIT: confirm_quit_menu,
 }
 load_settings()
 
