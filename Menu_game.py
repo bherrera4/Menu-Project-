@@ -4,6 +4,7 @@ import time
 import os
 import sys
 import json
+import random
 
 SETTINGS_FILE = "settings.json"
 
@@ -34,6 +35,11 @@ class MenuState(Enum):
     PAUSE = auto()
     QUIT = auto()
 
+# ============ Game State ==========
+game_data = {
+    "ticks": 0,
+    "running": True
+}
 
 # ============= Colors =============
 RESET = "\033[0m"
@@ -72,6 +78,13 @@ settings = {
 
 settings_return_state = MenuState.MAIN
 
+GRAPHICS_FPS = {
+    "Low": 60,
+    "Medium" : 45,
+    "High": 30, 
+    "Ultra": 20
+}
+
 # ---------------- Start Game ---------------- #
 def start_game():
     print("You selected to start the game. Starting game...")
@@ -88,6 +101,7 @@ def start_game():
 # ---------------- Options Menu ---------------- #
 def options_menu():
         print("\n" + "=" * 40)
+        global settings_return_state
 
         print("\n=== Options Menu ===")
         print(f"{BLUE}1. Volume: {settings['volume']}")
@@ -96,6 +110,8 @@ def options_menu():
         print(f"{BLUE}4. Back to Main Menu")
 
         choice = input("Select an option: ")
+
+        print("(In-Game Settings)" if settings_return_state == MenuState.PAUSE else "(Main Menu Settings)")
 
         # -------- Volume Settings -------- #
         if choice == "1":
@@ -123,6 +139,7 @@ def options_menu():
             if new_graphics in options:
                 settings["graphics"] = new_graphics
                 success("Graphics updated!")
+                apply_settings()
                 return MenuState.SETTINGS
             else:
                 error("Invalid graphics setting.")
@@ -133,7 +150,6 @@ def options_menu():
             settings["controls"] = "Gamepad" if settings["controls"] == "Keyboard" else "Keyboard"
 
             print(f"Controls switched to {settings['controls']}!")
-            global settings_return_state
             settings_return_state = MenuState.MAIN
             return MenuState.SETTINGS
 
@@ -148,7 +164,54 @@ def options_menu():
             return MenuState.SETTINGS
 
 # ---------------- Apply settings function ---------------- #
+GRAPHICS_FPS = {
+    "Low": 60,
+    "Medium": 45,
+    "High": 30,
+    "Ultra": 20
+}
+
+SPIKE_CHANCE = {
+    "Low": 0.05,
+    "Medium": 0.15,
+    "High": 0.30,
+    "Ultra": 0.45
+}
+
+GRAPHICS_STRESS = {
+    "Low":{
+        "base_jitter": 0.0,
+        "spike_chance": 0.01,
+        "spike_penalty": 0.0,
+    },
+    "Medium": {
+        "base_jitter": 0.005,
+        "spike_chance": 0.05,
+        "spike_penalty": 0.01,
+    },
+    "High": {
+        "base_jitter": 0.01,
+        "spike_chance": 0.05,
+        "spike_penalty": 0.01,
+    },
+    "Ultra": {
+        "base_jitter": 0.02,
+        "spike_chance": 0.2,
+        "spike_penalty": 0.06,
+    },
+}
+
 def apply_settings():
+    graphics = settings["graphics"].strip().capitalize()
+    fps = GRAPHICS_FPS.get(settings["graphics"], 30)
+
+    print(MAGENTA + f"[Graphics] Quality: {settings['graphics']}" + RESET)
+    print(CYAN + f"[Performance] Target FPS: {fps}" + RESET)
+
+    return fps
+
+def get_volume_description():
+
     if settings["volume"] >= 75:
         volume_desc = "LOUD"
     elif settings["volume"] >= 40:
@@ -160,15 +223,84 @@ def apply_settings():
 
     return volume_desc, graphics_level
 
+def maybe_apply_fps_spike(base_fps):
+    spike_chance = {
+        "Low": 0.05,
+        "Medium": 0.15,
+        "High": 0.30,
+        "Ultra": 0.45
+    }.get(settings["graphics"], 0.2)
+
+
+    # 20% chance to spike
+    if random.random() < spike_chance:
+        spike_amount = random.randint(10, 20)
+        spiked_fps = max(5, fps - spike_amount)
+        return spiked_fps, True
+
+        print(
+            RED +
+            f"[Performance Warning] FPS spike! ({fps} → {spiked_fps})"
+            + RESET
+        )
+
+        return spiked_fps
+
+    return base_fps, False
+
+
+# ------------------ Audio Section ---------------- #
+def get_audio_state(current_fps, base_fps):
+    volume = settings["volume"]
+
+    if volume == 0:
+        return "VOLUME IS MUTED"
+    
+    stress_ratio = current_fps / base_fps
+
+    if stress_ratio < 0.4:
+        return "SEVERE AUDIO CRACKLE HAS TAKEN EFFECT (Buffer collapse)"
+    
+    if stress_ratio < 0.6:
+        return "THERE IS NOW HEAVY AUDIO CRACKLE"
+    
+    if stress_ratio < 0.8:
+        return "LIGHT AUDIO CRACKLE"
+    
+    if current_fps < base_fps * 0.6:
+        return "AUDIO DISTORTION (Buffer underrun)"
+    
+    if volume < 30:
+        return "Audio is now muffled"
+    
+    if volume < 70:
+        return "Normal Audio"
+    
+    return "LOUD & CLEAR"
 
   # ---------------- Game Loop ---------------- #
+fps = apply_settings()
+frame_time = 1 / fps
 
 def game_loop():
-    volume_desc, graphics_level = apply_settings()
+    
+    volume_desc = get_volume_description()
+    graphics_level = settings["graphics"]
+
+    game_data["ticks"] += 1
+
+    os.system('cls' if os.name == 'nt' else 'clear')
 
     print("\n=== GAME IS NOW RUNNING ===")
 
+    print(
+        GREEN +
+        f"Resumed with {settings['graphics']} graphics ({fps} FPS)"
+        +RESET
+    )
+
     if graphics_level in ("High", "Ultra"):
+        print(YELLOW + f"Tick: {game_data['ticks']}" + RESET)
         print(CYAN + " Fancy Hud Enabled" + RESET)
 
     print(GREEN + f"Volume Level: {volume_desc}" +RESET)
@@ -177,6 +309,29 @@ def game_loop():
 
     print( YELLOW + "[P] Pause Game" + RESET)
     print(CYAN + "[Q] Quit Game" + RESET)
+
+    for frame in range(20):
+        current_fps, spiked = maybe_apply_fps_spike(fps)
+        frame_time = 1 / current_fps
+
+        audio_state = get_audio_state(current_fps, fps)
+
+        print(
+            YELLOW +
+            f"Rendering frame {frame + 1} at {current_fps} FPS..."
+            + ("GPU SPIKE!" if spiked else "")
+            + RESET
+        )
+
+        if "SEVERE" in audio_state:
+            print(RED + f"Audio: {audio_state}" + RESET)
+        elif "HEAVY" in audio_state:
+            print(YELLOW + f"Audio: {audio_state}" + RESET)
+        elif "LIGHT" in audio_state:
+            print(CYAN + f"Audio: {audio_state}" + RESET)
+        else:
+            print(GREEN + f"Audio: {audio_state}" + RESET)
+        time.sleep(frame_time)
 
     choice = input(BLUE + "> " + RESET).lower()
 
@@ -188,11 +343,13 @@ def game_loop():
         return MenuState.CONFIRM_QUIT
     
     elif choice == "1":
+        game_data["ticks"] = 0
         return MenuState.GAME
     
     else:
         error(RED + "Invalid choice. Please select a valid option." + RESET)
         return MenuState.GAME
+    
 
 # ---------------- Confirm Quit Menu ---------------- #
 
@@ -253,10 +410,13 @@ def main_menu():
         
 # ============= Pause Menu ============= #
 def pause_menu():
+    global settings_return_state
+
     print("\n=== GAME IS PAUSED ===")
     print(GREEN + "1. Resume Game" + RESET)
-    print(MAGENTA + "2. Return to Main Menu" + RESET)
-    print(CYAN + "3. Quit Game" + RESET)
+    print(CYAN + "2. Settings" + RESET)
+    print(MAGENTA + "3. Return to main Menu" + RESET)
+    print(RED + "4. Quit Game" + RESET)
 
     choice = input(BLUE + "Choose an option: " + RESET)
 
@@ -266,11 +426,13 @@ def pause_menu():
     
     elif choice == "2":
         print(MAGENTA + "Returning to Main Menu..." + RESET)
-        global settings_return_state
         settings_return_state = MenuState.PAUSE
         return MenuState.SETTINGS
     
     elif choice == "3":
+        return MenuState.MAIN
+    
+    elif choice == "4":
         return MenuState.CONFIRM_QUIT
     
     else:
