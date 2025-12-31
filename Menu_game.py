@@ -35,11 +35,19 @@ class MenuState(Enum):
     PAUSE = auto()
     QUIT = auto()
 
+audio_system = {
+    "state": "normal",
+    "recovery_timer": 0.0
+}
+
 # ============ Game State ==========
 game_data = {
     "ticks": 0,
     "running": True
 }
+
+# ========== Debug Flagging section ===========
+debug_overlay_enabled = False
 
 # ============= Colors =============
 RESET = "\033[0m"
@@ -250,33 +258,71 @@ def maybe_apply_fps_spike(base_fps):
 
 
 # ------------------ Audio Section ---------------- #
-def get_audio_state(current_fps, base_fps):
+def get_audio_state(current_fps, base_fps, delta_time):
+    stress_ratio = current_fps / base_fps
     volume = settings["volume"]
 
+    # Volume override
     if volume == 0:
-        return "VOLUME IS MUTED"
-    
+        audio_system["state"] = "normal"
+        audio_system["recovery_timer"] = 0.0
+        return "🔇 VOLUME MUTED"
+
+    # --- Severe degradation ---
+    if stress_ratio < 0.6:
+        audio_system["state"] = "crackle"
+        audio_system["recovery_timer"] = 0.0
+
+        if stress_ratio < 0.4:
+            return "📢📢📢 SEVERE AUDIO CRACKLE (Buffer collapse)"
+        else:
+            return "📢📢 HEAVY AUDIO CRACKLE"
+
+    # --- Begin recovery ---
+    if audio_system["state"] == "crackle":
+        audio_system["state"] = "recovering"
+        audio_system["recovery_timer"] = 0.0
+        return "🟡 Audio stabilizing..."
+
+    # --- Recovering ---
+    if audio_system["state"] == "recovering":
+        audio_system["recovery_timer"] += delta_time
+
+        if audio_system["recovery_timer"] >= 2.0:
+            audio_system["state"] = "normal"
+            return "🟢 Audio fully recovered"
+
+        return "🟡 Audio recovering..."
+
+    # --- Normal ---
+    if volume < 30:
+        return "🔈 Audio muffled"
+
+    if volume < 70:
+        return "🔊 Normal audio"
+
+    return "🔊 LOUD & CLEAR"
+
+# ---------------- Debug Overlay Function --------------
+def draw_debug_overlay(current_fps, base_fps):
     stress_ratio = current_fps / base_fps
 
-    if stress_ratio < 0.4:
-        return "SEVERE AUDIO CRACKLE HAS TAKEN EFFECT (Buffer collapse)"
-    
     if stress_ratio < 0.6:
-        return "THERE IS NOW HEAVY AUDIO CRACKLE"
-    
-    if stress_ratio < 0.8:
-        return "LIGHT AUDIO CRACKLE"
-    
-    if current_fps < base_fps * 0.6:
-        return "AUDIO DISTORTION (Buffer underrun)"
-    
-    if volume < 30:
-        return "Audio is now muffled"
-    
-    if volume < 70:
-        return "Normal Audio"
-    
-    return "LOUD & CLEAR"
+        gpu_state = "HIGH"
+    elif stress_ratio < 0.8:
+        gpu_state = "MEDIUM"
+    else:
+        gpu_state = "LOW"
+
+    print(MAGENTA + "\n [DEBUG] " + RESET)
+    print(f"Graphics Preset: {settings['graphics']}")
+    print(f"Target FPS: {base_fps}")
+    print(f"Current FPS: {current_fps}")
+    print(f"GPU Stress: {gpu_state}")
+    print(f"Audio State: {audio_system['state'].upper()}")
+    print(MAGENTA + "====================\n" + RESET)
+
+
 
   # ---------------- Game Loop ---------------- #
 fps = apply_settings()
@@ -286,6 +332,7 @@ def game_loop():
     
     volume_desc = get_volume_description()
     graphics_level = settings["graphics"]
+    global debug_overlay_enabled 
 
     game_data["ticks"] += 1
 
@@ -313,8 +360,9 @@ def game_loop():
     for frame in range(20):
         current_fps, spiked = maybe_apply_fps_spike(fps)
         frame_time = 1 / current_fps
+        delta_time = frame_time
 
-        audio_state = get_audio_state(current_fps, fps)
+        audio_state = get_audio_state(current_fps, fps, delta_time)
 
         print(
             YELLOW +
@@ -322,6 +370,12 @@ def game_loop():
             + ("GPU SPIKE!" if spiked else "")
             + RESET
         )
+
+        if debug_overlay_enabled:
+            draw_debug_overlay(current_fps, fps)
+
+            time.sleep(frame_time)
+
 
         if "SEVERE" in audio_state:
             print(RED + f"Audio: {audio_state}" + RESET)
@@ -334,6 +388,11 @@ def game_loop():
         time.sleep(frame_time)
 
     choice = input(BLUE + "> " + RESET).lower()
+
+    if choice == "d":
+        debug_overlay_enabled = not debug_overlay_enabled
+        print(WHITE + "[D] Toggle Debug Overlay" + RESET)
+        return MenuState.GAME 
 
     if choice == "p":
         print("Returning to Main Menu...")
